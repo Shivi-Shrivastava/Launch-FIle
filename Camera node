@@ -9,6 +9,8 @@ from launch.substitutions import PathJoinSubstitution, TextSubstitution, LaunchC
 from launch.actions import GroupAction, OpaqueFunction
 from launch_ros.actions import PushRosNamespace, SetRemap, SetParameter
 
+import os
+
 def generate_launch_description():
     turtlebot_camera = os.environ['turtlebot_camera']
 
@@ -16,8 +18,16 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument(
-        'usb_port',
-        default_value =usb_port,
-        description = 'Connected USB port with OpenCR'
-        )
+            'usb_port',
+            default_value =usb_port,
+            description = 'Connected USB port with OpenCR'
+        ),
+
+        Node(
+            package = 'turtlebot3_node',
+            executable = 'turtlebot3_ros',
+            parameter = [tb3_param_dir],
+            argument = ['-i', usb_port],
+            output = 'screen'
+        ),
     ])
