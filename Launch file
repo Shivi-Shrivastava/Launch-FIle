@@ -1,0 +1,125 @@
+from launch import LaunchDescription, LaunchContext
+from launch.actions import DeclareLaunchArgument
+from launch_ros.substitutions import FindPackageShare
+from launch_ros.actions import Node
+from launch.actions import IncludeLaunchDescription
+from launch.conditions import IfCondition, UnlessCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import PathJoinSubstitution, TextSubstitution, LaunchConfiguration
+from launch.actions import GroupAction, OpaqueFunction
+from launch_ros.actions import PushRosNamespace, SetRemap, SetParameter
+from ament_index_python.packages import get_package_share_directory
+
+import sys
+import os
+from statistics import mean
+import subprocess
+
+def generate_agents(context: LaunchContext, agent_count_subst):
+    ''' Generates the list of agent launch descriptions. '''
+
+    # Convert agent count to integer.
+    agent_count = int(context.perform_substitution(agent_count_subst))
+    agents = [] #This empty list is created to store the launch descriptions of every agent
+    for agent in range(agent_count):
+        agents += [
+            LogInfo(msg=TextSubstitution(text="Creating agent " + str(agent))),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource([
+                    PathJoinSubstitution([
+                        FindPackageShare('simulation_base'),
+                        'launch',
+                        'robot.launch.py'
+                    ])
+                ]),
+                launch_arguments={
+                    "id": str(agent),
+                    "name": "agent" + str(agent),
+                    "use_rviz": LaunchConfiguration("use_rviz"),
+                    "map": LaunchConfiguration("map"),
+                    "pose_x": str(35.0 + agent),
+                    "pose_y": "22.0",
+                }.items()
+            )
+        ]
+    
+    return agents
+
+def generate_launch_description():
+
+    turtlebot_camera = os.environ['turtlebot_camera']
+    burger = os.environ['TURTLEBOT3_MODEL']
+    LDS_MODEL = os.environ['LDS_MODEL']
+    LDS_LAUNCH_FILE = '/hlds_laser.launch.py'
+
+    subprocess.call(["ros2","launch","turtlebot3_bringup","robot.launch.py"]) #launches bringup files
+    subprocess.call(["ros2", "launch", "turtlebot3_cartographer", "cartographer.launch.py"]) #rviz cartographer node
+
+    open_port = LaunchConfiguration('open_port',default = '/dev/ttyACM0')
+
+    tb3_param_dir = LaunchConfiguration(
+        'tb3_param_dir',
+        default=os.path.join(
+            get_package_share_directory('turtlebot3_bringup'),
+            'param',
+            burger + '.yaml'))
+
+    if LDS_MODEL == 'LDS-01':
+        lidar_pkg_dir = LaunchConfiguration(
+            'lidar_pkg_dir',
+            default=os.path.join(get_package_share_directory('hls_lfcd_lds_driver'), 'launch'))
+    elif LDS_MODEL == 'LDS-02':
+        lidar_pkg_dir = LaunchConfiguration(
+            'lidar_pkg_dir',
+            default=os.path.join(get_package_share_directory('ld08_driver'), 'launch'))
+        LDS_LAUNCH_FILE = '/ld08.launch.py'
+    else:
+        lidar_pkg_dir = LaunchConfiguration(
+            'lidar_pkg_dir',
+            default=os.path.join(get_package_share_directory('hls_lfcd_lds_driver'), 'launch'))
+        
+    
+    GroupAction(
+            actions=[
+                SetEnvironmentVariable(
+                    name="DISPLAY",
+                    value=":0"
+                ),
+                IncludeLaunchDescription(
+                    PythonLaunchDescriptionSource([
+                        PathJoinSubstitution([
+                            FindPackageShare('gazebo_ros'),
+                            'launch',
+                            'gzserver.launch.py'
+                        ])
+                    ]),
+                    launch_arguments={
+                        'world': LaunchConfiguration("gazebo_world_file"),
+                    }.items()
+                ),
+            ]
+    ),
+    
+    return LaunchDescription([
+        DeclareLaunchArgument(
+            'open_port',
+            default_value = open_port,
+            description = 'Connected USB port with OpenCR'
+        ),
+
+        DeclareLaunchArgument(
+            'tb3_param_dir',
+            default_value=tb3_param_dir,
+            description='Full path to turtlebot3 parameter file to load'),
+
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([ PathJoinSubstitution([FindPackageShare('gazebo_ros'),'launch','gzclient.launch.py'])
+            ]),
+            condition = IfCondition(LaunchConfiguration("use_gzclient")),
+        ),
+
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([lidar_pkg_dir, LDS_LAUNCH_FILE]),
+            launch_arguments={'port': '/dev/ttyUSB0', 'frame_id': 'base_scan'}.items(),
+        ),
+    ])
