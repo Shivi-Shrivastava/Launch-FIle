@@ -1,0 +1,32 @@
+launch:
+
+# Launch arguments.
+- arg:
+    name: "params_file"
+    default: "$(find-pkg-share robot_turtlebot3)/config/nav2_params.yaml"
+# - arg:
+#     name: "gazebo_world_file"
+#     default: "$(find-pkg-share grex)/models/maps/$(var map)/model.sdf"
+# - arg:
+#     name: "headless"
+#     default: "false"
+
+
+
+- group:
+    # - set_env:
+    #     name: "DISPLAY"
+    #     value: ":0"
+
+
+    - include:
+        file: "$(find-pkg-share turtlebot3_bringup)/launch/robot.launch.py"
+    
+    - include:
+        file: "$(find-pkg-share nav2_bringup)/launch/bringup_launch.py"
+        arg:
+            - name: "params_file"
+              value: "$(var params_file)"
+        arg:
+            - name: "map"
+              value: "$HOME/room_476.yaml"
